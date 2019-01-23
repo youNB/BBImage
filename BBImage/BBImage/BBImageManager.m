@@ -19,6 +19,7 @@
 @property(nonatomic, strong) NSString *stored_dir;//图片存储的文件夹
 @property(nonatomic, strong) NSCache  *mem_cache; //内存缓存
 @property(nonatomic, strong) NSMutableDictionary<NSString *, NSMutableArray<void (^)(UIImage *BBImage, NSString *md5, NSError *error)> *> *key_values;
+@property(nonatomic, assign) UIBackgroundTaskIdentifier task_identifier;
 @end
 
 @implementation BBImageManager
@@ -31,6 +32,40 @@
         manager = [[self alloc]init];
     });
     return manager;
+}
+
+- (instancetype)init{
+    if([super init]){
+        SEL back_sel = @selector(appDidEnterBackground:);
+        SEL fore_sel = @selector(appDidEnterForeground:);
+        const NSNotificationName back = UIApplicationDidEnterBackgroundNotification;
+        const NSNotificationName fore = UIApplicationWillEnterForegroundNotification;
+        [NSNotificationCenter.defaultCenter addObserver:self
+                                               selector:back_sel
+                                                   name:back
+                                                 object:nil];
+        [NSNotificationCenter.defaultCenter addObserver:self
+                                               selector:fore_sel
+                                                   name:fore
+                                                 object:nil];
+        
+    }
+    return self;
+}
+
+//程序进入后台，申请额外执行时间，防止当前正在下载图片被中断
+- (void)appDidEnterBackground:(UIApplication *)app{
+    _task_identifier = [app beginBackgroundTaskWithName:@"my_task"
+                                      expirationHandler:^{
+        [app endBackgroundTask:self.task_identifier];
+        self.task_identifier = UIBackgroundTaskInvalid;
+    }];
+}
+
+- (void)appDidEnterForeground:(UIApplication *)app{
+    if(self.task_identifier == UIBackgroundTaskInvalid){return;}
+    [app endBackgroundTask:self.task_identifier];
+    self.task_identifier = UIBackgroundTaskInvalid;
 }
 
 - (BOOL)imageCached:(NSString *)link{
